@@ -4,14 +4,16 @@ const paddleHeight = 20;
 // Ball dimensions
 const ballSize = 15;
 // Speeds
-const ballSpeed = 10;
-const paddleSpeed = 20;
+let ballSpeed = 10;
+let paddleSpeed = 20;
+const fps = 60;
 
 let playerPaddle, aiPaddle, ball;
 
 // Runs once at the start
 function setup() {
-    createCanvas(windowWidth, windowHeight).id("canvas");
+    frameRate(fps);
+    createCanvas(window.innerWidth, window.innerHeight).id("canvas");
     // Initialize player, AI paddles and ball
     playerPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, true);
     aiPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, false);
@@ -31,11 +33,6 @@ function draw() {
     ball.move();
     // Check ball collisions
     ball.checkCollision(playerPaddle, aiPaddle);
-}
-
-// Resize canvas when window size changes
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
 }
 
 // Global variable to store touch position
@@ -93,7 +90,6 @@ class Paddle {
                 this.x += this.speed;
             }
         } else {
-            // AI control - predict ball position
             let predictedX;
 
             if (ball.vy < 0) {
@@ -102,7 +98,7 @@ class Paddle {
             } else {
                 // ball is moving downwards, predict where it will be when it hits the AI paddle
                 const t = (windowHeight - this.h - ball.y) / ball.vy; // time until the ball hits the paddle
-                predictedX = ball.x + ball.vx * t; // x position of the ball when it hits the paddle
+                predictedX = ball.x + ball.vx * t;
 
                 // consider ball bouncing off the walls
                 const nBounces = Math.floor(predictedX / windowWidth);
@@ -115,11 +111,11 @@ class Paddle {
                 }
             }
 
-            // move AI paddle to predicted position
-            if (predictedX < this.x) {
-                this.x -= Math.min(this.speed, this.x - predictedX);
-            } else if (predictedX + ballSize > this.x + this.w) {
-                this.x += Math.min(this.speed, predictedX + ballSize - (this.x + this.w));
+            // move AI paddle to predicted position, but ensure it doesn't move off the screen
+            if (predictedX < this.x && this.x - this.speed > 0) {
+                this.x -= Math.min(this.speed * deltaTime / (1000 / fps), this.x - predictedX);
+            } else if (predictedX + ballSize > this.x + this.w && this.x + this.w + this.speed < windowWidth) {
+                this.x += Math.min(this.speed * deltaTime / (1000 / fps), predictedX + ballSize - (this.x + this.w));
             }
         }
     }
@@ -149,8 +145,8 @@ class Ball {
     }
 
     move() {
-        this.x += this.vx;
-        this.y += this.vy;
+        this.x += this.vx * deltaTime / (1000 / fps);
+        this.y += this.vy * deltaTime / (1000 / fps);
 
         // Bounce off walls
         if (this.x < 0 || this.x > windowWidth - this.s) {
@@ -175,4 +171,3 @@ class Ball {
         }
     }
 }
-
