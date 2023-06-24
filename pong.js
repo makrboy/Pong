@@ -6,7 +6,6 @@ const ballSize = 15;
 // Speeds
 const ballSpeed = 10;
 const paddleSpeed = 20;
-const topAI = true; // Set to true if you want the top paddle to be AI-controlled
 
 let playerPaddle, aiPaddle, ball;
 
@@ -14,8 +13,8 @@ let playerPaddle, aiPaddle, ball;
 function setup() {
     createCanvas(windowWidth, windowHeight).id("canvas");
     // Initialize player, AI paddles and ball
-    playerPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, !topAI);
-    aiPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, topAI);
+    playerPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, true);
+    aiPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, false);
     ball = new Ball(ballSize, ballSpeed);
 }
 
@@ -24,7 +23,7 @@ function draw() {
     background(0); // black
     // Display and move paddles
     playerPaddle.display();
-    playerPaddle.move(ball);
+    playerPaddle.move();
     aiPaddle.display();
     aiPaddle.move(ball);
     // Display and move ball
@@ -85,36 +84,42 @@ class Paddle {
     }
 
     move(ball) {
-        // Player control
         if (this.isPlayer) {
+            // Player control
             if ((keyIsDown(LEFT_ARROW) || (touchPosition.x !== null && touchPosition.x < windowWidth / 2)) && this.x > 0) {
                 this.x -= this.speed;
             }
             if ((keyIsDown(RIGHT_ARROW) || (touchPosition.x !== null && touchPosition.x > windowWidth / 2)) && this.x < windowWidth - this.w) {
                 this.x += this.speed;
             }
-        } 
-        // AI control
-        else {
+        } else {
+            // AI control - predict ball position
             let predictedX;
-            if (ball.vy * (this.y < windowHeight / 2 ? 1 : -1) < 0) {
+
+            if (ball.vy < 0) {
+                // ball is moving upwards, AI just follows the ball horizontally
                 predictedX = ball.x;
             } else {
-                predictedX = ball.x + ((this.y < windowHeight / 2 ? 1 : -1) * (this.y - ball.y) * ball.vx / ball.vy);
-                while (predictedX < 0 || predictedX > windowWidth - ball.s) {
-                    if (predictedX < 0) {
-                        predictedX = -predictedX;
-                    }
-                    if (predictedX > windowWidth - ball.s) {
-                        predictedX = 2 * (windowWidth - ball.s) - predictedX;
-                    }
+                // ball is moving downwards, predict where it will be when it hits the AI paddle
+                const t = (windowHeight - this.h - ball.y) / ball.vy; // time until the ball hits the paddle
+                predictedX = ball.x + ball.vx * t; // x position of the ball when it hits the paddle
+
+                // consider ball bouncing off the walls
+                const nBounces = Math.floor(predictedX / windowWidth);
+                if (nBounces % 2 === 1) {
+                    // ball will bounce an odd number of times, so it will end up on the opposite side
+                    predictedX = windowWidth - (predictedX % windowWidth);
+                } else {
+                    // ball will bounce an even number of times, so it will end up on the same side
+                    predictedX = predictedX % windowWidth;
                 }
             }
+
+            // move AI paddle to predicted position
             if (predictedX < this.x) {
                 this.x -= Math.min(this.speed, this.x - predictedX);
-            }
-            if (predictedX + ball.s > this.x + this.w) {
-                this.x += Math.min(this.speed, (predictedX + ball.s) - (this.x + this.w));
+            } else if (predictedX + ballSize > this.x + this.w) {
+                this.x += Math.min(this.speed, predictedX + ballSize - (this.x + this.w));
             }
         }
     }
@@ -170,3 +175,4 @@ class Ball {
         }
     }
 }
+
