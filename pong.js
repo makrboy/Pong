@@ -1,173 +1,187 @@
-// Paddle dimensions
-const paddleWidth = 100;
-const paddleHeight = 20;
-// Ball dimensions
-const ballSize = 15;
-// Speeds
-let ballSpeed = 10;
-let paddleSpeed = 20;
-const fps = 60;
+let opPlayer = false;
+let playerPaddle, aiPaddle, ball, paddleWidth, paddleHeight, paddleSpeed, ballSize, ballSpeed, aiNapTime;
+let playerScore = 0;
+let aiScore = 0;
+let scoreColor;
+let targetScoreColor;
 
-let playerPaddle, aiPaddle, ball;
-
-// Runs once at the start
 function setup() {
-    frameRate(fps);
-    createCanvas(window.innerWidth, window.innerHeight).id("canvas");
-    // Initialize player, AI paddles and ball
+    createCanvas(windowWidth, windowHeight).id("canvas");
+    paddleWidth = windowWidth / 5;
+    paddleHeight = windowWidth / 50;
+    ballSize = windowWidth / 50;
+    ballSpeed = (windowHeight + windowWidth) / 2 / 100;
+    paddleSpeed = (windowHeight + windowWidth) / 2 / 50;
+
     playerPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, true);
     aiPaddle = new Paddle(paddleWidth, paddleHeight, paddleSpeed, false);
     ball = new Ball(ballSize, ballSpeed);
+    scoreColor = color(0, 255, 0, 255);
+    targetScoreColor = color(0, 255, 0, 255);
 }
 
-// Runs every frame
 function draw() {
-    background(0); // black
-    // Display and move paddles
+    background(0);
     playerPaddle.display();
-    playerPaddle.move();
+    playerPaddle.move(ball);
     aiPaddle.display();
     aiPaddle.move(ball);
-    // Display and move ball
     ball.display();
     ball.move();
-    // Check ball collisions
     ball.checkCollision(playerPaddle, aiPaddle);
+    displayScore();
 }
 
-// Global variable to store touch position
+function displayScore() {
+    scoreColor = lerpColor(scoreColor, targetScoreColor, 0.05);
+    textAlign(CENTER, CENTER);
+    textSize((windowHeight + windowWidth) / 2 / 25);
+    fill(scoreColor);
+    text("Player: " + playerScore + '\nAI: ' + aiScore + "\nFirst to three wins", windowWidth / 2, windowHeight / 2);
+}
+
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+}
+
 var touchPosition = {
     x: null,
     y: null
 };
 
-// Add an event listener for touchstart event
 document.addEventListener('touchstart', handleTouchStart, false);
-
-// Add an event listener for touchend event
 document.addEventListener('touchend', handleTouchEnd, false);
 
-// Function to handle touchstart event
 function handleTouchStart(event) {
-    // Get the first touch object
     var touch = event.touches[0];
-
-    // Update touch position
     touchPosition.x = touch.clientX;
     touchPosition.y = touch.clientY;
 }
 
-// Function to handle touchend event
 function handleTouchEnd(event) {
-    // Reset touch position
     touchPosition.x = null;
     touchPosition.y = null;
 }
 
-// Paddle class
 class Paddle {
     constructor(w, h, s, isPlayer) {
-        this.w = w;
-        this.h = h;
-        this.speed = s;
-        this.isPlayer = isPlayer;
-        this.x = windowWidth / 2 - w / 2; // Center horizontally
-        this.y = isPlayer ? 0 : windowHeight - h; // Top for player, bottom for AI
+        this.targetX = 0
+        this.w = w
+        this.h = h
+        this.napTime = 0
+        this.speed = s
+        this.isPlayer = isPlayer
+        this.x = windowWidth / 2 - w / 2
+        this.y = isPlayer ? 0 : windowHeight - h
     }
 
     display() {
-        fill(0, 255, 0); // bright green
+        fill(0, 255, 0);
         rect(this.x, this.y, this.w, this.h);
     }
 
     move(ball) {
         if (this.isPlayer) {
-            // Player control
-            if ((keyIsDown(LEFT_ARROW) || (touchPosition.x !== null && touchPosition.x < windowWidth / 2)) && this.x > 0) {
-                this.x -= this.speed;
-            }
-            if ((keyIsDown(RIGHT_ARROW) || (touchPosition.x !== null && touchPosition.x > windowWidth / 2)) && this.x < windowWidth - this.w) {
-                this.x += this.speed;
-            }
-        } else {
-            let predictedX;
-
-            if (ball.vy < 0) {
-                // ball is moving upwards, AI just follows the ball horizontally
-                predictedX = ball.x;
+            if (opPlayer) {
+                this.x = ball.x - this.w / 2
             } else {
-                // ball is moving downwards, predict where it will be when it hits the AI paddle
-                const t = (windowHeight - this.h - ball.y) / ball.vy; // time until the ball hits the paddle
-                predictedX = ball.x + ball.vx * t;
-
-                // consider ball bouncing off the walls
-                const nBounces = Math.floor(predictedX / windowWidth);
-                if (nBounces % 2 === 1) {
-                    // ball will bounce an odd number of times, so it will end up on the opposite side
-                    predictedX = windowWidth - (predictedX % windowWidth);
-                } else {
-                    // ball will bounce an even number of times, so it will end up on the same side
-                    predictedX = predictedX % windowWidth;
+                if ((keyIsDown(LEFT_ARROW) || (touchPosition.x !== null && touchPosition.x < windowWidth / 2)) && this.x > 0) {
+                    this.x -= this.speed;
+                }
+                if ((keyIsDown(RIGHT_ARROW) || (touchPosition.x !== null && touchPosition.x > windowWidth / 2)) && this.x < windowWidth - this.w) {
+                    this.x += this.speed;
                 }
             }
-
-            // move AI paddle to predicted position, but ensure it doesn't move off the screen
-            if (predictedX < this.x && this.x - this.speed > 0) {
-                this.x -= Math.min(this.speed * deltaTime / (1000 / fps), this.x - predictedX);
-            } else if (predictedX + ballSize > this.x + this.w && this.x + this.w + this.speed < windowWidth) {
-                this.x += Math.min(this.speed * deltaTime / (1000 / fps), predictedX + ballSize - (this.x + this.w));
-            }
+        } else {
+            this.x += Math.min(Math.max((this.targetX - this.w / 2) - this.x, -this.speed), this.speed)
+            this.x = Math.min(Math.max(this.x, 0), windowWidth - this.w)
         }
     }
 }
 
-// Ball class
+function calculateBounce(vx, vy, cw, ch, bx, by) {
+    let distance = vy < 0 ? by + ch : ch - by
+    let predictedX = vx * (distance / Math.abs(vy)) + bx
+    while (predictedX < 0 || predictedX > cw) {
+        if (predictedX < 0) {
+            predictedX = -predictedX
+        } else if (predictedX > ch) {
+            predictedX = cw - (predictedX - cw)
+        }
+    }
+    return (predictedX)
+}
+
 class Ball {
     constructor(s, v) {
         this.s = s;
-        this.initialSpeed = v; // keep track of the initial speed
+        this.initialSpeed = v;
         this.vx = v;
         this.vy = v;
-        this.speedIncrement = 1; // you can adjust this value
-        this.reset(); // call reset to set initial position
+        this.speedIncrement = 0;
+        this.reset();
     }
 
     reset() {
-        this.x = windowWidth / 2 - this.s / 2; // Center horizontally
-        this.y = windowHeight / 2 - this.s / 2; // Center vertically
-        this.vx = this.initialSpeed * (Math.random() < .5 ? 1 : -1);
-        this.vy = this.initialSpeed * (Math.random() < .5 ? 1 : -1);
+        if (Math.random() < .1) {
+            this.x = Math.random() * (windowWidth - this.s)
+            this.y = this.s / 2 + paddleHeight * 2
+            this.vx = this.initialSpeed * (Math.random() < .5 ? 1 : -1)
+            this.vy = this.initialSpeed
+        } else {
+            this.x = Math.random() * (windowWidth - this.s)
+            this.y = windowHeight - this.s / 2 - paddleHeight * 2
+            this.vx = this.initialSpeed * (Math.random() < .5 ? 1 : -1)
+            this.vy = -this.initialSpeed
+        }
+
+        aiPaddle.napTime = 0
+        aiPaddle.speed = paddleSpeed
+        aiPaddle.targetX = calculateBounce(this.vx, this.vy, windowWidth, windowHeight, this.x, this.y)
+
+        if (this.vy > 0) {
+            playerScore++;
+            targetScoreColor = color(0, 255, 0, 0);
+        } else {
+            aiScore++;
+            targetScoreColor = color(0, 255, 0, 0);
+        }
+
+        scoreColor = color(0, 255, 0, 255);
     }
 
     display() {
-        fill(0, 255, 0); // white
-        rect(this.x, this.y, this.s, this.s);
+        fill(0, 255, 0);
+        rect(this.x, this.y, this.s, this.s)
     }
 
     move() {
-        this.x += this.vx * deltaTime / (1000 / fps);
-        this.y += this.vy * deltaTime / (1000 / fps);
+        this.x += this.vx
+        this.y += this.vy
 
-        // Bounce off walls
         if (this.x < 0 || this.x > windowWidth - this.s) {
-            this.vx *= -1;
+            this.vx *= -1
         }
 
-        // If it hits the top or bottom, reset game
         if (this.y < 0 || this.y > windowHeight - this.s) {
-            this.reset(); // reset ball position
+            this.reset()
+            opPlayer = false
         }
     }
 
-    // Check if ball collides with a paddle
     checkCollision(playerPaddle, aiPaddle) {
-        if (
-            this.y <= playerPaddle.h && this.x + this.s > playerPaddle.x && this.x < playerPaddle.x + playerPaddle.w ||
-            this.y + this.s >= windowHeight - aiPaddle.h && this.x + this.s > aiPaddle.x && this.x < aiPaddle.x + aiPaddle.w
-        ) {
+        if (this.y <= playerPaddle.h && this.x + this.s > playerPaddle.x && this.x < playerPaddle.x + playerPaddle.w) {
             this.vy *= -1;
-            this.vx += this.vx < 0 ? -this.speedIncrement : this.speedIncrement; // increase speed after each bounce
+            this.vx += this.vx < 0 ? -this.speedIncrement : this.speedIncrement;
             this.vy += this.vy < 0 ? -this.speedIncrement : this.speedIncrement;
+        }
+        if (this.y + this.s >= windowHeight - aiPaddle.h && this.x + this.s > aiPaddle.x && this.x < aiPaddle.x + aiPaddle.w) {
+            this.vy *= -1;
+            setTimeout(() => {
+                aiPaddle.targetX = calculateBounce(this.vx, this.vy, windowWidth, windowHeight, this.x, this.y)
+            }, aiPaddle.napTime);
+            aiPaddle.napTime += 100
+            aiPaddle.speed *= .9
         }
     }
 }
